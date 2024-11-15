@@ -1,6 +1,4 @@
 import pandas as pd
-import bar_chart_race as bcr
-import numpy as np
 import glob
 import pickle
 from tqdm import tqdm
