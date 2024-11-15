@@ -31,3 +31,6 @@ df_source = {}
 for date, values in elo_scores.items():
     df_source[date] = {key: values.get(key, 0) for key in all_models}
 df = pd.DataFrame.from_dict(df_source, orient='index').sort_index()
+
+with open('output/result.csv', 'w') as f:
+    f.write(df.to_csv())
