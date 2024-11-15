@@ -1,2 +1,4 @@
 pandas
 tqdm
+plotly
+numpy
