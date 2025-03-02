@@ -2,6 +2,7 @@ import pandas as pd
 import glob
 import pickle
 from tqdm import tqdm
+import json
 
 elo_results = {}
 for csv_path in tqdm(glob.glob('./chatbot-arena-leaderboard/elo_results_*.pkl')):
@@ -9,28 +10,50 @@ for csv_path in tqdm(glob.glob('./chatbot-arena-leaderboard/elo_results_*.pkl'))
     with open(csv_path, 'rb') as f:
         elo_results[date] = pickle.load(f)
 
-elo_scores = {}
-for date, elo in elo_results.items():
+TITLE_NORMALIZE = {
+    'full': 'overall',
+    'full_style_control': 'overall_style_control',
+    'long': 'long_user'
+}
+def normalize_title(t: str) -> str:
+    if t in TITLE_NORMALIZE:
+        return TITLE_NORMALIZE[t]
+    return t
+
+scores_by_date = {}
+for i, (date, elo) in enumerate(list(elo_results.items())[:]):
     scores = None
     if 'elo_rating_online' in elo:
-        scores = elo['elo_rating_online']
-    elif 'full' in elo:
-        scores = elo['full']['elo_rating_online']
-    elif 'text' in elo:
-        scores = elo['text']['full']['elo_rating_final'].to_dict()
+        scores = {
+            "text": {
+                "overall": elo['elo_rating_online']
+            }
+        }
+    elif 'text' in elo and 'vision' in elo:
+        scores = {
+            "text": {},
+            "vision": {}
+        }
+        for title, rating in elo['text'].items():
+            scores['text'][normalize_title(title)] = rating['elo_rating_final'].to_dict()
+        for title, rating in elo['vision'].items():
+            scores['vision'][normalize_title(title)] = rating['elo_rating_final'].to_dict()
+    elif (
+        ('dedup' in elo and 'english' in elo) or
+        ('full' in elo and 'no_refusal' in elo and 'long_user' in elo) or
+        ('full' in elo and 'chinese' in elo) or
+        (len(elo.keys()) == 1 and 'full' in elo)
+    ):
+        scores = {
+            'text': {}
+        }
+        for title, rating in elo.items():
+            scores['text'][normalize_title(title)] = rating['elo_rating_final'].to_dict()
+
     else:
-        raise TypeError(elo.keys())
+        raise TypeError(i, date, elo.keys())
 
-    elo_scores[date] = scores
+    scores_by_date[date] = scores
 
-all_models = set()
-for scores in elo_scores.values():
-    for model in scores.keys():
-        all_models.add(model)
-df_source = {}
-for date, values in elo_scores.items():
-    df_source[date] = {key: values.get(key, 0) for key in all_models}
-df = pd.DataFrame.from_dict(df_source, orient='index').sort_index()
-
-with open('output/result.csv', 'w') as f:
-    f.write(df.to_csv())
+with open('output/scores.json', 'w') as f:
+    json.dump(scores_by_date, f, indent=2)
